@@ -1,0 +1,191 @@
+apiVersion: template.openshift.io/v1 #v1
+kind: Template
+labels:
+  template: amq-streams-12-cluster-template
+# xpaas: 1.4.16
+message: Kafka cluster based on AMQ Streams 1.2 is deployed into your project
+metadata:
+  annotations:
+    description: Template for Red Hat AMQ Streams
+    openshift.io/display-name: Red Hat AMQ Streams
+    openshift.io/provider-display-name: Red Hat, Inc.
+    tags: streams,amq,xpaas, strimzi
+    template.openshift.io/documentation-url: 'https://access.redhat.com/documentation/en/red-hat-amq/'
+#   version: 1.4.16
+  name: amq-streams-v12-cluster
+objects:
+- apiVersion: rbac.authorization.k8s.io/v1beta1
+  kind: RoleBinding
+  metadata:
+    name: strimzi-cluster-operator
+    labels:
+      app: strimzi
+  subjects:
+  - kind: ServiceAccount
+    name: ${OPERATOR_SERVICE_ACCOUNT_NAME}
+    namespace: ${AMQ_OPERATOR_NAMESPACE}
+  roleRef:
+    kind: ClusterRole
+    name: strimzi-cluster-operator-namespaced
+    apiGroup: rbac.authorization.k8s.io
+- apiVersion: rbac.authorization.k8s.io/v1beta1
+  kind: RoleBinding
+  metadata:
+    name: strimzi-cluster-operator-entity-operator-delegation
+    labels:
+      app: strimzi
+  subjects:
+  - kind: ServiceAccount
+    name: ${OPERATOR_SERVICE_ACCOUNT_NAME}
+    namespace: ${AMQ_OPERATOR_NAMESPACE}
+  roleRef:
+    kind: ClusterRole
+    name: strimzi-entity-operator
+    apiGroup: rbac.authorization.k8s.io
+- apiVersion: rbac.authorization.k8s.io/v1beta1
+  kind: RoleBinding
+  metadata:
+    name: strimzi-cluster-operator-topic-operator-delegation
+    labels:
+      app: strimzi
+  subjects:
+  - kind: ServiceAccount
+    name: ${OPERATOR_SERVICE_ACCOUNT_NAME}
+    namespace: ${AMQ_OPERATOR_NAMESPACE}
+  roleRef:
+    kind: ClusterRole
+    name: strimzi-topic-operator
+    apiGroup: rbac.authorization.k8s.io
+- apiVersion: v1
+  data:
+    ca.crt: ${BASE64_CA_CRT}
+  kind: Secret
+  metadata:
+    labels:
+      strimzi.io/cluster: ${KAFKA_CLUSTER}
+      strimzi.io/kind: Kafka
+    name: ${KAFKA_CLUSTER}-cluster-ca-cert
+  type: Opaque
+- apiVersion: v1
+  data:
+    ca.key: ${BASE64_CA_CRT_KEY}
+  kind: Secret
+  metadata:
+    labels:
+      strimzi.io/cluster: ${KAFKA_CLUSTER}
+      strimzi.io/kind: Kafka
+    name: ${KAFKA_CLUSTER}-cluster-ca
+- apiVersion: kafka.strimzi.io/v1beta1
+  kind: Kafka
+  metadata:
+    name: ${KAFKA_CLUSTER}
+  spec:
+    clusterCa:
+      generateCertificateAuthority: false
+    kafka:
+      version: 2.2.1
+      replicas: ${{KAFKA_BROKER_SIZE}}
+      listeners:
+        tls: {}
+        external:
+          type: route
+      config:
+        offsets.topic.replication.factor: 3
+        transaction.state.log.replication.factor: 3
+        transaction.state.log.min.isr: 2
+        log.message.format.version: "2.2"
+      storage:
+        type: jbod
+        volumes:
+        - id: 0
+          type: persistent-claim
+          size: 10Gi
+          deleteClaim: false
+      resources:
+        requests:
+          memory: 512Mi
+          cpu: 500m
+        limits:
+          memory: 2Gi
+          cpu: 750m
+      readinessProbe:
+        initialDelaySeconds: 60
+        timeoutSeconds: 5
+      livenessProbe:
+        initialDelaySeconds: 60
+        timeoutSeconds: 5
+    zookeeper:
+      replicas: ${{ZK_SIZE}}
+      storage:
+        type: persistent-claim
+        size: 10Gi
+        deleteClaim: false
+      resources:
+        requests:
+          memory: 512Mi
+          cpu: 200m
+        limits:
+          memory: 2Gi
+          cpu: 500m
+    entityOperator:
+      topicOperator:
+        resources:
+          requests:
+            memory: 512Mi
+            cpu: 200m
+          limits:
+            memory: 2Gi
+            cpu: 500m
+      userOperator:
+        resources:
+          requests:
+            memory: 512Mi
+            cpu: 200m
+          limits:
+            memory: 2Gi
+            cpu: 500m
+- apiVersion: kafka.strimzi.io/v1alpha1
+  kind: KafkaTopic
+  metadata:
+    name: ${KAFKA_TOPIC}
+    labels:
+      strimzi.io/cluster: my-cluster
+  spec:
+    partitions: 1
+    replicas: 1
+    config:
+      retention.ms: 7200000
+      segment.bytes: 1073741824
+parameters:
+- description: Strimzi Operator Service Account Name
+  displayName: Operator Service Account Name
+  name: OPERATOR_SERVICE_ACCOUNT_NAME
+  value: strimzi-cluster-operator
+- description: Namespace where AMQ Streams operator resides
+  displayName: AMQ Streams Operator namespace
+  name: AMQ_OPERATOR_NAMESPACE
+  value: amq-operator
+- description: Name of the Kafka cluster
+  displayName: Kafka Cluster Name
+  name: KAFKA_CLUSTER
+  value: my-cluster
+- description: Number of kafka brokers in the cluster
+  displayName: Kafka Broker Cluser Size
+  name: KAFKA_BROKER_SIZE
+  value: "3"
+- description: Number of ZooKeepers in the cluster
+  displayName: ZooKeeper Cluser Size
+  name: ZK_SIZE
+  value: "3"
+- description: Name of the Kafka topic
+  displayName: Kafka Topic Name
+  name: KAFKA_TOPIC
+  value: my-topic
+- description: Kafka cluster base64 encoded PEM public certificate 
+  displayName: base64 encoded PEM cerificate
+  name: BASE64_CA_CRT
+  value: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURMVENDQWhXZ0F3SUJBZ0lKQUkxV0dLazVweXJTTUEwR0NTcUdTSWIzRFFFQkN3VUFNQzB4RXpBUkJnTlYKQkFvTUNtbHZMbk4wY21sdGVta3hGakFVQmdOVkJBTU1EV05zZFhOMFpYSXRZMkVnZGpBd0hoY05NVGt3TnpFNApNVGsxTlRBeldoY05NakF3TnpFM01UazFOVEF6V2pBdE1STXdFUVlEVlFRS0RBcHBieTV6ZEhKcGJYcHBNUll3CkZBWURWUVFEREExamJIVnpkR1Z5TFdOaElIWXdNSUlCSWpBTkJna3Foa2lHOXcwQkFRRUZBQU9DQVE4QU1JSUIKQ2dLQ0FRRUE1NTRyVTUzWWZOVkpJTlZLZTRIUW5majM4VmpkRkVqZ2FTakI0dDNyRzREMXRFYkUwVUZZZmZIeApabjBjTjNGK2ZpbUZkb2JibTVabHE2bTh5c05GcU5TTVRZQzg3QXlFSnlUQTJsSFJPZ0c4dGMrZkxZQXRaMHhVCmUzRUJwREVUWWNYSUJyand2TVhsQXVYcE82bXBtWHBGVDhQRS9xL0p5ZVVMeEhTUjVjOWhMTXk5S1lTZlc2cmQKTWJrK3o3bElWaUJQTkVYWTZSb3pscE5OcUlQY0lia3h5d0VIWUZlVXk2N3k5U2t3VVE4SFUyU2tsUWQ4UkVScApaTmFZNXlLcGZPdUpvN2J4QVg3MmFYSFExa2V4a1pBUXVpVEx5MVpNUk5KNmxraFdmQXAyMTkvM3pTQVFJTEVwClFodExYU3UrK0E3QkwrVmNLdm0yT3JoZEhvNk1Nd0lEQVFBQm8xQXdUakFkQmdOVkhRNEVGZ1FVYTZmWGgzZWYKckxnYzNlZXJlQ1orQXR2UzN5RXdId1lEVlIwakJCZ3dGb0FVYTZmWGgzZWZyTGdjM2VlcmVDWitBdHZTM3lFdwpEQVlEVlIwVEJBVXdBd0VCL3pBTkJna3Foa2lHOXcwQkFRc0ZBQU9DQVFFQTBjbXdWaFQvbndYLzJFZEUrQ2JxClZqRXBpL0FlOVZ0L2IrVWVXbmNtZi90VFdzekpyNHFhU3lwQU5wZlB5QU03WjNYeVprOXVCcHhpMlpJYlE0a2cKWTV3QVJGc0dHWWxWaEc5TzhEaDVObDVucDhkTllDbXFZN3JrNndwMnBuMU5kTjAvbllaV0FaL1RXRjU1d1RxVwpwTmMrZWdMbUptQ2F6bTJpVWRQQTNTZ0JGTElMMTZpVjA3bk9GaS9rb0R4cmh6eFpENktZVVVSUTZlckhWQkdPClFTSCszekl2T1JlaEpaWDYrK05zMzRYalhmQXBwWkNOb0w3N09hM2lyTm9UeGFXTE1CZDh0MmdRakdxNlN6Z2sKdWpBQ3RQQnQxSkRzNXYxNjAzZ21JektLS1lkb21UOHZMQXY4bVJwWFJ5WVQ0czhONnlla2hoYkxmWTRKcDVXVgppdz09Ci0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K
+- description: Kafka cluster base64 encoded PEM private key
+  displayName: base64 encoded PEM cerificate key
+  name: BASE64_CA_CRT_KEY
+  value: LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCk1JSUV2Z0lCQURBTkJna3Foa2lHOXcwQkFRRUZBQVNDQktnd2dnU2tBZ0VBQW9JQkFRRG5uaXRUbmRoODFVa2cKMVVwN2dkQ2QrUGZ4V04wVVNPQnBLTUhpM2VzYmdQVzBSc1RSUVZoOThmRm1mUnczY1g1K0tZVjJodHVibG1XcgpxYnpLdzBXbzFJeE5nTHpzRElRbkpNRGFVZEU2QWJ5MXo1OHRnQzFuVEZSN2NRR2tNUk5oeGNnR3VQQzh4ZVVDCjVlazdxYW1aZWtWUHc4VCtyOG5KNVF2RWRKSGx6MkVzekwwcGhKOWJxdDB4dVQ3UHVVaFdJRTgwUmRqcEdqT1cKazAyb2c5d2h1VEhMQVFkZ1Y1VExydkwxS1RCUkR3ZFRaS1NWQjN4RVJHbGsxcGpuSXFsODY0bWp0dkVCZnZacApjZERXUjdHUmtCQzZKTXZMVmt4RTBucVdTRlo4Q25iWDMvZk5JQkFnc1NsQ0cwdGRLNzc0RHNFdjVWd3ErYlk2CnVGMGVqb3d6QWdNQkFBRUNnZ0VBSGw1MXpkdm5jODYvYk9lcWdYRXUrbGVYb3ZTRTRGRUI0NmZ0YkNLdTNnZFYKc0JLTFllaVFnc3NEWE8zUWtsQjJSbktKUmxZK1d6TW9GNDhFNncwWmlCNStXdmNqVGt3QjArUVV5VXRyQkpFUAp2a0wvMndad2JaZnJoOWYwWUNQeko2RzRMWEY0VnpnWFkvN2pTdWhmRFhtanR1YXpZTFdKM3NnQ2QvclUybTNMCnNPRmFQT1hKeTIrKzBiKys4cjJKNXRxYWc5VUc2TmpkbHI4VEE1MUZUWmZPVzZZbVQxSitMc2NPQWo2cHFiNC8KR01xMlB2SVdlbmtIK2phZnJTaWhkRGFxS3FLSFZKdlVVNVNTY2xtaUNhUmlwQ0hkMTF4MDFCRWlNYStFNjhwegpxR1kvN3NMMHFWRkFyMkt2dTRGcGFtUm9OeFlvaGVReEp5RU5wMTRKcVFLQmdRRDRQZURTSDJaV1hRY09kaWVWCmQzWnhEYmxOS01lQVFqRE5nY3V2Z0VOMDN1L2lBNExadjRMbyt3MVQ3VDhpTXFKTHYzaksrbTAzNlBNRlV6YlUKRjJ0M1lXTmVkeW9pTkc1K1llRHJmOU5kTEs4L3hPcVc0UDRQNGt6cDRzblFwWDF5WlkrKy90c3ptVFdObXViMQp2eGUzU1JwQmhyZk1yVGh6MEIrZ1lSUXlYd0tCZ1FEdTIwbWNCa1krdGJrNFcvcjc4VkQ1RGc0ZzNjYmxrZ2pRCjVWeUdHRVpWbVRWMCtieUE4UWt0eWI0TWdhY2xVSUhjRy9TeWNDTzJsMVZBR2wxdERUSk9lVkFIbjZUNFMvamcKTXVwNmlXejFwZlhlMnUrYjdhU0cyVGFGSmJsZmhFanVFOUVlNHZwQUhWNE4rWUgvZEVhMVFYSXpsb1JxT0dpSgoyT2k4QXpxK3JRS0JnUUM5bkRYL0NURFh3cExEUHdpWkovaDEvZStOdWhvNEkxYTNnZTZjakxINXNOYzFvVXp2CkdWTGF0ZmZHSlM3VjVpc0ZCS2sxRVBjZmYzVXdtaEVGQ3lad3R4aDViVGZuakhqaFc4MjYwNVlVVXk5QTNCMzcKUkx1S1VtWkJONUxESmNTZC9tay9qOWJLb0xuQkFaSnNIcHYweVllZWlWSVdxakMyZFQvUzlwUEFyUUtCZ1FDYQpwczhkUDQ3QjBhV1FVVFhMWks2NTR4alF2T2VvQW9yRXZvek9vZThBUTBleWFuUmJ4RFRlT2E1Y3FLSFJialAyCmtQODVmWlFTQ0NBQmRsQ2hhQmIzYW1LZjNRVFNZMVpMeTR1NE5UeWdQSWxhZHNVSFg3SFVRZFdrRmczVlEzQjQKL2NtN3h0aWpKS0NlU2J1YTYrMVFOSVM5MUNuK0lISEhOdk5Sc0lHYnJRS0JnQ3FFamZkcHNGc0xwOVFTN3N5bwpUdStZMnpwY3BBaU4xT3U0a1d3MTFIeVZTdW1QTTQ2RzRtS2NKWDVoTlZ3NHltNXBVb3p0L0cybmxyNTV2aHBzCjAwOHdXUzEvQVlqcmtvTWRXa0hESncvTXZJZTN2QW8rSTVMUHBSWmNVcGtMNUVSWnJtVDFEWk5Ta1p1dUVqMHoKUEZJR3dqWmdHamtDUjFOT2JjVUZTelI3Ci0tLS0tRU5EIFBSSVZBVEUgS0VZLS0tLS0K
