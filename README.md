@@ -51,7 +51,7 @@ In order to deploy execute the following steps
 	oc process -f templates/cluster_template.yaml -p OPERATOR_SERVICE_ACCOUNT_NAME=strimzi-cluster-operator -p AMQ_OPERATOR_NAMESPACE=amq-operator-a -p KAFKA_CLUSTER=my-cluster -p KAFKA_BROKER_SIZE=3 -p ZK_SIZE=3 | oc apply -f - -n datacenter-a
     ```
     
-6. AMQ Operator in above step is created in *paused* state. So, resume the deployment
+6. AMQ Operator in above step is created in **paused** state. So, resume the deployment
    
     ```shell
     oc rollout resume  deployment strimzi-cluster-operator -n amq-operator-a
@@ -65,5 +65,47 @@ In order to deploy execute the following steps
     oc process -f templates/operator_template.yaml -p NAMESPACES_TO_WATCH=datacenter-b -p PULL_SECRET=$PULL_SECRET -p SERVICE_ACCOUNT_NAME=strimzi-cluster-operator| oc apply -f - -n amq-operator-b
     oc process -f templates/cluster_template.yaml -p OPERATOR_SERVICE_ACCOUNT_NAME=strimzi-cluster-operator -p AMQ_OPERATOR_NAMESPACE=amq-operator-b -p KAFKA_CLUSTER=my-second-cluster -p KAFKA_BROKER_SIZE=3 -p ZK_SIZE=3 | oc apply -f - -n datacenter-b
     oc rollout resume  deployment strimzi-cluster-operator -n amq-operator-b 
-  ```
+  	```
+  	
+## Verification
 
+Once operators and clusters are deployed, here are the steps to produce and consume messages to kafka cluster using **kafka console utilities**. Please note that java with atleast version 8 is installed. Kafka utilities need java.
+
+1. Download kafka zip file that has utilities from [here](https://access.redhat.com/jbossnetwork/restricted/softwareDownload.html?softwareId=70471) and unzip the file to say `kafka-util`
+
+2. Extract the certificate from one of the kafka cluster namespaces i.e. datacenter-a or datacenter-b
+
+	```
+	oc extract secret/my-cluster-cluster-ca-cert -n datacenter-a --keys=ca.crt --to=- > ca.crt
+	```
+
+3. keytool -keystore kafka.client.truststore.jks -alias CARoot -import -file ca.crt -storepass test1234 -noprompt
+
+4. Create a kafka config file say client-plain-tls.properties with the following contents that needs to be passed in while running kafka utilities
+
+	```
+	security.protocol=SSL
+	ssl.truststore.location=kafka.client.truststore.jks
+	ssl.truststore.password=test1234
+	ssl.endpoint.identification.algorithm=HTTPS
+	```
+	
+5. Run consumer in a terminal window
+
+	```shell
+	export BROKER_URL=`oc get routes my-cluster-kafka-bootstrap -n datacenter-a -o=jsonpath='{.status.ingress[0].host}{"\n"}'`
+	export KAFKA_HOME=kafka-util
+	$KAFKA_HOME/bin/kafka-console-consumer.sh --bootstrap-server $BROKER_URL:443 --topic my-topic --consumer.config client-plain-tls.properties
+	```
+	
+6. Run producer in a different terminal window
+
+	```
+	export BROKER_URL=`oc get routes my-cluster-kafka-bootstrap -n datacenter-a -o=jsonpath='{.status.ingress[0].host}{"\n"}'`
+	export KAFKA_HOME=kafka-util
+	$KAFKA_HOME/bin/kafka-console-producer.sh --broker-list $BROKER_URL:443 --topic my-topic --producer.config client-plain-tls.properties
+	```
+	
+7. At producer window, type the messages and see that they are consumed by consumer
+
+8. Run consumer and producer against kafka cluster in datacenter-b by changing the bootstrap url
