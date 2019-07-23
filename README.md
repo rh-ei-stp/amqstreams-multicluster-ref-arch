@@ -79,7 +79,11 @@ Once operators and clusters are deployed, here are the steps to produce and cons
 	oc extract secret/my-cluster-cluster-ca-cert -n datacenter-a --keys=ca.crt --to=- > ca.crt
 	```
 
-3. keytool -keystore kafka.client.truststore.jks -alias CARoot -import -file ca.crt -storepass test1234 -noprompt
+3. Create a java key store file for kafka utilities
+
+	```shell
+	keytool -keystore kafka.client.truststore.jks -alias CARoot -import -file ca.crt -storepass test1234 -noprompt
+	```
 
 4. Create a kafka config file say client-plain-tls.properties with the following contents that needs to be passed in while running kafka utilities
 
