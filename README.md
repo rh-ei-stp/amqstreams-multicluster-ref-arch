@@ -53,7 +53,7 @@ In order to deploy execute the following steps
     
 6. AMQ Operator in above step is created in *paused* state. So, resume the deployment
    
-       ```shell
+    ```shell
     oc rollout resume  deployment strimzi-cluster-operator -n amq-operator-a
     ```
 
