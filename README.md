@@ -14,7 +14,7 @@ MirrorMaker 1.0 which does one-way replication i.e. from Production to DR will r
  
 *Note*: Since it is a TEST environment and lack of DNS server and GTM infrastructure availability, instructions outlined below does not deploy DNS URL and GTM. Clients will directly connect to kafka's bootstrap URL.
 
-## Installation
+## Operator and Kafka Cluster Installation
 
 Instructions below deploys two operators and two kafka and zookeper clusters in different namespaces simulating multiple clusters/environments. E.g. amq-operator-a, datacenter-a namespaces represent Production Cluster. Whereas, amq-operator-b, datacenter-b namespaces represent DR Cluster.
 
@@ -42,7 +42,7 @@ In order to deploy execute the following steps
 	oc apply -f clusterrole/
     ```
     
-5. Create projects and deploy strimzi operator, kafka clusters. AMQ Operator deployed in amq-operator-a watches for Kafka CRDs in datacenter-a. Kafka cluster is created with own cluster certificates.
+5. Create projects and deploy AMQStreams operator, kafka clusters. AMQStreams Operator deployed in amq-operator-a watches for Kafka CRDs in datacenter-a. Here, kafka cluster is created with own cluster certificates.
 
     ```shell
     oc new-project amq-operator-a
@@ -51,13 +51,13 @@ In order to deploy execute the following steps
 	oc process -f templates/cluster_template.yaml -p OPERATOR_SERVICE_ACCOUNT_NAME=strimzi-cluster-operator -p AMQ_OPERATOR_NAMESPACE=amq-operator-a -p KAFKA_CLUSTER=my-cluster -p KAFKA_BROKER_SIZE=3 -p ZK_SIZE=3 | oc apply -f - -n datacenter-a
     ```
     
-6. AMQ Operator in above step is created in **paused** state. So, resume the deployment
+6. AMQStreams Operator in above step is created in **paused** state. So, resume the deployment
    
     ```shell
     oc rollout resume  deployment strimzi-cluster-operator -n amq-operator-a
     ```
 
-7. Repeat above two steps where AMQ Operator deployed in amq-operator-b watches for Kafka CRDs in datacenter-b.
+7. Repeat above two steps where AMQStreams Operator deployed in amq-operator-b watches for Kafka CRDs in datacenter-b.
 
     ```shell
     oc new-project amq-operator-b
@@ -66,12 +66,45 @@ In order to deploy execute the following steps
     oc process -f templates/cluster_template.yaml -p OPERATOR_SERVICE_ACCOUNT_NAME=strimzi-cluster-operator -p AMQ_OPERATOR_NAMESPACE=amq-operator-b -p KAFKA_CLUSTER=my-second-cluster -p KAFKA_BROKER_SIZE=3 -p ZK_SIZE=3 | oc apply -f - -n datacenter-b
     oc rollout resume  deployment strimzi-cluster-operator -n amq-operator-b 
   	```
-  	
+## MirrorMaker Installation
+Instructions below deploys MirrorMaker in DR OpenShift cluster i.e. datacenter-b in our case. It consumes messages from source cluster topics and produces it to destination cluster.
+
+Here are the steps
+
+1. In our case, same certificates are used for source and destination clusters. So, extract the certificate from one of the kafka cluster namespaces i.e. datacenter-a or datacenter-b
+
+    ```shell
+	oc extract secret/my-cluster-cluster-ca-cert -n datacenter-a --keys=ca.crt --to=- > ca.crt
+    ```
+2. MirrorMaker communicates with two clusters. So, create two secrets that houses certificates i.e. producer-secret and consumer-secret. Even though it is same certificate for both clusters, KafkaMirrorMaker needs them to be defined as two different secrets
+
+	```
+    oc create secret generic producer-secret --from-file=ca.crt
+    oc create secret generic consumer-secret --from-file=ca.crt
+    ```
+3. MirrorMaker has to authenticate while communicating with clusters. So, create two secrets that contains password i.e. producer-password and consumer-password. Even though it is same credentials for both clusters, KafkaMirrorMaker needs them to be defined as two different secrets
+
+	```
+    oc create secret generic producer-password --from-literal=password=gUoNKbFYIPV5
+    oc create secret generic consumer-password --from-literal=password=gUoNKbFYIPV5
+    ```
+4. Deploy the MirrorMaker using template
+
+	```
+    oc process -f mirrormaker_template.yaml -p SOURCE_BOOTSTRAP_URL=my-cluster-kafka-bootstrap-datacenter-c.apps.cluster-atl-994b.atl-994b.openshiftworkshop.com \
+    -p DESTINATION_BOOTSTRAP_SVC=my-second-cluster-kafka-bootstrap \
+    -p CONSUMER_TLS_SECRET=consumer-secret -p CONSUMER_CERT_FILENAME=ca.crt \
+    -p CONSUMER_USERNAME=my-user -p CONSUMER_PASSWORD_SECRET=consumer-password \
+    -p CONSUMER_PASSWORD_KEY=password -p PRODUCER_TLS_SECRET=producer-secret \
+    -p PRODUCER_CERT_FILENAME=ca.crt -p PRODUCER_USERNAME=my-user \
+    -p PRODUCER_PASSWORD_SECRET=producer-password \
+    -p PRODUCER_PASSWORD_KEY=password | oc apply -f - -n datacenter-b
+    ```
 ## Verification
 
-Once operators and clusters are deployed, here are the steps to produce and consume messages to kafka cluster using **kafka console utilities**. Please note that java with atleast version 8 is installed. Kafka utilities need java.
+Once operators and clusters are deployed, here are the steps to produce and consume messages to kafka cluster using **kafka console utilities**. Please make sure that java with atleast version 8 is installed. Kafka utilities need java.
 
-1. Download kafka zip file that has utilities from [here](https://access.redhat.com/jbossnetwork/restricted/softwareDownload.html?softwareId=70471) and unzip the file to say `kafka-util`
+1. Download the kafka zip file that has utilities from [here](https://access.redhat.com/jbossnetwork/restricted/softwareDownload.html?softwareId=70471) and unzip the file to say `kafka-util` folder.
 
 2. Extract the certificate from one of the kafka cluster namespaces i.e. datacenter-a or datacenter-b
 
@@ -85,31 +118,65 @@ Once operators and clusters are deployed, here are the steps to produce and cons
 	keytool -keystore kafka.client.truststore.jks -alias CARoot -import -file ca.crt -storepass test1234 -noprompt
 	```
 
-4. Create a kafka config file say client-plain-tls.properties with the following contents that needs to be passed in while running kafka utilities
+4. Create a kafka config file say `client-sasl-scram.properties` with the following contents that needs to be passed in while running kafka utilities. Change username and password accordingly if the parameters  passed in for kafka user and kafka user password is different from what the below example uses
 
 	```
-	security.protocol=SSL
+ 	security.protocol=SASL_SSL
 	ssl.truststore.location=kafka.client.truststore.jks
 	ssl.truststore.password=test1234
 	ssl.endpoint.identification.algorithm=HTTPS
+
+	sasl.mechanism=SCRAM-SHA-512
+	sasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule required \
+          username="my-user" \
+          password="gUoNKbFYIPV5";
 	```
 	
-5. Run consumer in a terminal window
+5. Run a consumer in a terminal window
 
 	```shell
 	export BROKER_URL=`oc get routes my-cluster-kafka-bootstrap -n datacenter-a -o=jsonpath='{.status.ingress[0].host}{"\n"}'`
 	export KAFKA_HOME=kafka-util
-	$KAFKA_HOME/bin/kafka-console-consumer.sh --bootstrap-server $BROKER_URL:443 --topic my-topic --consumer.config client-plain-tls.properties
+	$KAFKA_HOME/bin/kafka-console-consumer.sh --bootstrap-server $BROKER_URL:443 --topic my-topic --consumer.config client-sasl-scram.properties
 	```
 	
-6. Run producer in a different terminal window
+6. Run a producer in a different terminal window
 
 	```
 	export BROKER_URL=`oc get routes my-cluster-kafka-bootstrap -n datacenter-a -o=jsonpath='{.status.ingress[0].host}{"\n"}'`
 	export KAFKA_HOME=kafka-util
-	$KAFKA_HOME/bin/kafka-console-producer.sh --broker-list $BROKER_URL:443 --topic my-topic --producer.config client-plain-tls.properties
+	$KAFKA_HOME/bin/kafka-console-producer.sh --broker-list $BROKER_URL:443 --topic my-topic --producer.config client-sasl-scram.properties
 	```
 	
 7. At producer window, type the messages and see that they are consumed by consumer
 
 8. Run consumer and producer against kafka cluster in datacenter-b by changing the bootstrap url
+
+## MirrorMaker Verification
+
+We are going to use the same kafka console utilities and `client-sasl-scram.properties` to test MirrorMaker replication. Messages are produced in source cluster and see that they are consumed in source cluster, replicated in destination cluster and consumed from there
+
+1. Run a consumer consuming messages from source cluster i.e. datacenter-a in a terminal window
+
+	```shell
+	export BROKER_URL=`oc get routes my-cluster-kafka-bootstrap -n datacenter-a -o=jsonpath='{.status.ingress[0].host}{"\n"}'`
+	export KAFKA_HOME=kafka-util
+	$KAFKA_HOME/bin/kafka-console-consumer.sh --bootstrap-server $BROKER_URL:443 --topic my-topic --consumer.config client-sasl-scram.properties
+	```
+2. Run another consumer consuming messages from destination cluster i.e. datacenter-b in a terminal window
+
+	```shell
+	export BROKER_URL=`oc get routes my-cluster-kafka-bootstrap -n datacenter-b -o=jsonpath='{.status.ingress[0].host}{"\n"}'`
+	export KAFKA_HOME=kafka-util
+	$KAFKA_HOME/bin/kafka-console-consumer.sh --bootstrap-server $BROKER_URL:443 --topic my-topic --consumer.config client-sasl-scram.properties
+	```
+3. Run a producer producing messages to source cluster i.e. datacenter-a in a terminal window
+
+	```
+	export BROKER_URL=`oc get routes my-cluster-kafka-bootstrap -n datacenter-a -o=jsonpath='{.status.ingress[0].host}{"\n"}'`
+	export KAFKA_HOME=kafka-util
+	$KAFKA_HOME/bin/kafka-console-producer.sh --broker-list $BROKER_URL:443 --topic my-topic --producer.config client-sasl-scram.properties
+	```
+4. At producer window, type the messages and see that they are consumed by two consumers i.e. one is listening to a topic in source cluster and the other is to the destination cluster.
+
+5. Run consumer and producer against kafka cluster in datacenter-b by changing the bootstrap url
