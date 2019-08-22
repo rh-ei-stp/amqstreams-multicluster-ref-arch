@@ -78,20 +78,22 @@ Here are the steps
     ```
 2. MirrorMaker communicates with two clusters. So, create two secrets that houses certificates i.e. producer-secret and consumer-secret. Even though it is same certificate for both clusters, KafkaMirrorMaker needs them to be defined as two different secrets
 
-	```
+	```shell
     oc create secret generic producer-secret --from-file=ca.crt
     oc create secret generic consumer-secret --from-file=ca.crt
     ```
 3. MirrorMaker has to authenticate while communicating with clusters. So, create two secrets that contains password i.e. producer-password and consumer-password. Even though it is same credentials for both clusters, KafkaMirrorMaker needs them to be defined as two different secrets
 
-	```
+	```shell
     oc create secret generic producer-password --from-literal=password=gUoNKbFYIPV5
     oc create secret generic consumer-password --from-literal=password=gUoNKbFYIPV5
     ```
 4. Deploy the MirrorMaker using template
 
-	```
-    oc process -f mirrormaker_template.yaml -p SOURCE_BOOTSTRAP_URL=my-cluster-kafka-bootstrap-datacenter-c.apps.cluster-atl-994b.atl-994b.openshiftworkshop.com \
+	```shell
+    export BROKER_URL=`oc get routes my-cluster-kafka-bootstrap -n datacenter-a -o=jsonpath='{.status.ingress[0].host}{"\n"}'`
+    
+    oc process -f mirrormaker_template.yaml -p SOURCE_BOOTSTRAP_URL=$BROKER_URL \
     -p DESTINATION_BOOTSTRAP_SVC=my-second-cluster-kafka-bootstrap \
     -p CONSUMER_TLS_SECRET=consumer-secret -p CONSUMER_CERT_FILENAME=ca.crt \
     -p CONSUMER_USERNAME=my-user -p CONSUMER_PASSWORD_SECRET=consumer-password \
@@ -108,7 +110,7 @@ Once operators and clusters are deployed, here are the steps to produce and cons
 
 2. Extract the certificate from one of the kafka cluster namespaces i.e. datacenter-a or datacenter-b
 
-	```
+	```shell
 	oc extract secret/my-cluster-cluster-ca-cert -n datacenter-a --keys=ca.crt --to=- > ca.crt
 	```
 
@@ -120,7 +122,7 @@ Once operators and clusters are deployed, here are the steps to produce and cons
 
 4. Create a kafka config file say `client-sasl-scram.properties` with the following contents that needs to be passed in while running kafka utilities. Change username and password accordingly if the parameters  passed in for kafka user and kafka user password is different from what the below example uses
 
-	```
+	```properties
  	security.protocol=SASL_SSL
 	ssl.truststore.location=kafka.client.truststore.jks
 	ssl.truststore.password=test1234
@@ -142,7 +144,7 @@ Once operators and clusters are deployed, here are the steps to produce and cons
 	
 6. Run a producer in a different terminal window
 
-	```
+	```shell
 	export BROKER_URL=`oc get routes my-cluster-kafka-bootstrap -n datacenter-a -o=jsonpath='{.status.ingress[0].host}{"\n"}'`
 	export KAFKA_HOME=kafka-util
 	$KAFKA_HOME/bin/kafka-console-producer.sh --broker-list $BROKER_URL:443 --topic my-topic --producer.config client-sasl-scram.properties
@@ -172,7 +174,7 @@ We are going to use the same kafka console utilities and `client-sasl-scram.prop
 	```
 3. Run a producer producing messages to source cluster i.e. datacenter-a in a terminal window
 
-	```
+	```shell
 	export BROKER_URL=`oc get routes my-cluster-kafka-bootstrap -n datacenter-a -o=jsonpath='{.status.ingress[0].host}{"\n"}'`
 	export KAFKA_HOME=kafka-util
 	$KAFKA_HOME/bin/kafka-console-producer.sh --broker-list $BROKER_URL:443 --topic my-topic --producer.config client-sasl-scram.properties
