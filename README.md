@@ -18,7 +18,7 @@ MirrorMaker 1.0 which does one-way replication i.e. from Production to DR will r
 
 Instructions below deploys two operators and two kafka and zookeper clusters in different namespaces simulating multiple clusters/environments. E.g. amq-operator-a, datacenter-a namespaces represent Production Cluster. Whereas, amq-operator-b, datacenter-b namespaces represent DR Cluster.
 
-Get a [pull secret](https://access.redhat.com/terms-based-registry/#/accounts) for the registry.redhat.con and store it in a file called `pull-secret.base64`
+Get a [pull secret](https://access.redhat.com/terms-based-registry/#/accounts) for the registry.redhat.com and store it in a file called `pull-secret.base64`
 
 In order to deploy execute the following steps
 
@@ -233,7 +233,7 @@ batch.size=8196
 ```
 MirrorMaker lag monitoring:
 
-```
+```shell
 watch '$KAFKA_HOME/bin/kafka-consumer-groups.sh --bootstrap-server $BROKER_URL:443 --command-config client-sasl-scram.properties --group my-mirrormaker-group-id --describe'
 ```
 
@@ -249,7 +249,7 @@ Producer test results:
 Conclusions:
 
 Given a small cluster (see limits above) and a producer throughput of 1 MB/s, we can keep `datacenter-b` generally less than 20 seconds 
-behind `datacenter-a`. This may or may not be within a organization's SLAs.
+behind `datacenter-a`. This may or may not be within an organization's SLAs.
 
 To enable large messages, these two values need to match: `KafkaMirrorMaker.spec.producer.config.max.request.size`
  and `Kafka.spec.kafka.config.message.max.bytes`
