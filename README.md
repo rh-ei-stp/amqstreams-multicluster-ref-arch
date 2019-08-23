@@ -208,10 +208,11 @@ Zookeeper
 MirrorMaker
 
 ```yaml
+  replicas: 3
   resources:
     limits:
-      cpu: 250m
-      memory: 512Mi
+      cpu: 500m
+      memory: 2Gi
 ```
 
 Producer command:
