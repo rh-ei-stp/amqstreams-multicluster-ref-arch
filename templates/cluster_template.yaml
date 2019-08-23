@@ -98,6 +98,8 @@ objects:
         transaction.state.log.replication.factor: 3
         transaction.state.log.min.isr: 2
         log.message.format.version: "2.2"
+        message.max.bytes: 2097152
+        log.retention.bytes: 1275000000
       storage:
         type: jbod
         volumes:
