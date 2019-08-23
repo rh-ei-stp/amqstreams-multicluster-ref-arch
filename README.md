@@ -18,7 +18,7 @@ MirrorMaker 1.0 which does one-way replication i.e. from Production to DR will r
 
 Instructions below deploys two operators and two kafka and zookeper clusters in different namespaces simulating multiple clusters/environments. E.g. amq-operator-a, datacenter-a namespaces represent Production Cluster. Whereas, amq-operator-b, datacenter-b namespaces represent DR Cluster.
 
-Get a [pull secret](https://access.redhat.com/terms-based-registry/#/accounts) for the registry.redhat.con and store it in a file called `pull-secret.base64`
+Get a [pull secret](https://access.redhat.com/terms-based-registry/#/accounts) for the registry.redhat.com. Once the secret is generated, go to the OpenShift secret tab and extract the value of the dockerconfigjson variable and store it in a file called `pull-secret.base64`
 
 In order to deploy execute the following steps
 
@@ -29,6 +29,12 @@ In order to deploy execute the following steps
     ```
     
 2. Clone this repository to your local computer and login to the OpenShift Cluster using a user who has ClusterAdmin access. ClusterAdmin is needed to install and create Kafka Custom Resource Definitions(CRDs).  
+
+To add cluster cluster admin rights
+
+    ```shell
+     oc adm policy add-cluster-role-to-user cluster-admin
+    ```
 
 3. Deploy Kafka CRDs:
 
@@ -76,6 +82,7 @@ Here are the steps
     ```shell
 	oc extract secret/my-cluster-cluster-ca-cert -n datacenter-a --keys=ca.crt --to=- > ca.crt
     ```
+
 2. MirrorMaker communicates with two clusters. So, create two secrets that houses certificates i.e. producer-secret and consumer-secret. Even though it is same certificate for both clusters, KafkaMirrorMaker needs them to be defined as two different secrets
 
 	```shell
@@ -122,6 +129,7 @@ Once operators and clusters are deployed, here are the steps to produce and cons
 
 4. Create a kafka config file say `client-sasl-scram.properties` with the following contents that needs to be passed in while running kafka utilities. Change username and password accordingly if the parameters  passed in for kafka user and kafka user password is different from what the below example uses
 
+
 	```properties
  	security.protocol=SASL_SSL
 	ssl.truststore.location=kafka.client.truststore.jks
@@ -144,15 +152,32 @@ Once operators and clusters are deployed, here are the steps to produce and cons
 	
 6. Run a producer in a different terminal window
 
-	```shell
+	```
 	export BROKER_URL=`oc get routes my-cluster-kafka-bootstrap -n datacenter-a -o=jsonpath='{.status.ingress[0].host}{"\n"}'`
-	export KAFKA_HOME=kafka-util
+	export KAFKA_HOME=kafka-util/kafka_2.12-2.2.1.redhat-00002
 	$KAFKA_HOME/bin/kafka-console-producer.sh --broker-list $BROKER_URL:443 --topic my-topic --producer.config client-sasl-scram.properties
 	```
 	
-7. At producer window, type the messages and see that they are consumed by consumer
+7. In the producer window, type messages and hit enter to send them and see that they are consumed by consumer.
 
-8. Run consumer and producer against kafka cluster in datacenter-b by changing the bootstrap url
+8. Run consumer and producer against kafka cluster in datacenter-b by changing the bootstrap url.
+
+Kill the producer and consumer programs with ```ctrl-c```.
+
+Run a consumer in a terminal window
+
+        ```
+        export BROKER_URL=`oc get routes my-second-cluster-kafka-bootstrap -n datacenter-b -o=jsonpath='{.status.ingress[0].host}{"\n"}'` 
+        $KAFKA_HOME/bin/kafka-console-producer.sh --broker-list $BROKER_URL:443 --topic my-topic --producer.config client-sasl-scram.properties
+
+        ```
+
+Run a producer in a different terminal window
+
+        ```
+        export BROKER_URL=`oc get routes my-second-cluster-kafka-bootstrap -n datacenter-b -o=jsonpath='{.status.ingress[0].host}{"\n"}'`
+        $KAFKA_HOME/bin/kafka-console-producer.sh --broker-list $BROKER_URL:443 --topic my-topic --producer.config client-sasl-scram.properties
+        ```
 
 ## MirrorMaker Verification
 
@@ -168,17 +193,19 @@ We are going to use the same kafka console utilities and `client-sasl-scram.prop
 2. Run another consumer consuming messages from destination cluster i.e. datacenter-b in a terminal window
 
 	```shell
-	export BROKER_URL=`oc get routes my-cluster-kafka-bootstrap -n datacenter-b -o=jsonpath='{.status.ingress[0].host}{"\n"}'`
+	export BROKER_URL=`oc get routes my-second-cluster-kafka-bootstrap -n datacenter-b -o=jsonpath='{.status.ingress[0].host}{"\n"}'`
 	export KAFKA_HOME=kafka-util
+
 	$KAFKA_HOME/bin/kafka-console-consumer.sh --bootstrap-server $BROKER_URL:443 --topic my-topic --consumer.config client-sasl-scram.properties
 	```
 3. Run a producer producing messages to source cluster i.e. datacenter-a in a terminal window
 
-	```shell
+	```
 	export BROKER_URL=`oc get routes my-cluster-kafka-bootstrap -n datacenter-a -o=jsonpath='{.status.ingress[0].host}{"\n"}'`
-	export KAFKA_HOME=kafka-util
 	$KAFKA_HOME/bin/kafka-console-producer.sh --broker-list $BROKER_URL:443 --topic my-topic --producer.config client-sasl-scram.properties
 	```
-4. At producer window, type the messages and see that they are consumed by two consumers i.e. one is listening to a topic in source cluster and the other is to the destination cluster.
+4. In the producer window, type the messages and see that they are consumed by two consumers i.e. one is listening to a topic in source cluster and the other is to the destination cluster.
 
 5. Run consumer and producer against kafka cluster in datacenter-b by changing the bootstrap url
+
+
