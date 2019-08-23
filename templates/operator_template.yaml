@@ -1,0 +1,127 @@
+apiVersion: template.openshift.io/v1 #v1
+kind: Template
+labels:
+  template: amq-streams-12-operator
+# xpaas: 1.4.16
+message: AMQ Streams Operator is deployed into your project that watches for kafka crds in ${NAMESPACES_TO_WATCH} namespace.
+metadata:
+  annotations:
+    description: Template for Red Hat AMQ Streams Operator
+    openshift.io/display-name: Red Hat AMQ Streams Operator
+    openshift.io/provider-display-name: Red Hat, Inc.
+    tags: streams,amq,xpaas, strimzi
+    template.openshift.io/documentation-url: 'https://access.redhat.com/documentation/en/red-hat-amq/'
+#   version: 1.4.16
+  name: amq-streams-v12-operator
+objects:
+- apiVersion: v1
+  kind: Secret
+  metadata:
+    name: image-pull-secret
+  data:
+    .dockerconfigjson: ${PULL_SECRET}
+  type: kubernetes.io/dockerconfigjson        
+- apiVersion: v1
+  kind: ServiceAccount
+  metadata:
+    name: ${SERVICE_ACCOUNT_NAME}
+    labels:
+      app: strimzi
+- apiVersion: extensions/v1beta1
+  kind: Deployment
+  metadata:
+    name: strimzi-cluster-operator
+    labels:
+      app: strimzi
+  spec:
+    replicas: 1
+    paused: true
+    template:
+      metadata:
+        labels:
+          name: strimzi-cluster-operator
+          strimzi.io/kind: cluster-operator
+      spec:
+        imagePullSecrets:
+        - name: image-pull-secret
+        serviceAccountName: ${SERVICE_ACCOUNT_NAME}
+        containers:
+        - name: strimzi-cluster-operator
+          image: registry.redhat.io/amq7/amq-streams-operator:1.2.0
+          imagePullPolicy: IfNotPresent
+          args:
+          - /opt/strimzi/bin/cluster_operator_run.sh
+          env:
+          - name: STRIMZI_NAMESPACE
+            value: ${NAMESPACES_TO_WATCH}
+          - name: STRIMZI_FULL_RECONCILIATION_INTERVAL_MS
+            value: "120000"
+          - name: STRIMZI_OPERATION_TIMEOUT_MS
+            value: "300000"
+          - name: STRIMZI_DEFAULT_ZOOKEEPER_IMAGE
+            value: registry.redhat.io/amq7/amq-streams-kafka-22:1.2.0
+          - name: STRIMZI_DEFAULT_TLS_SIDECAR_ENTITY_OPERATOR_IMAGE
+            value: registry.redhat.io/amq7/amq-streams-kafka-22:1.2.0
+          - name: STRIMZI_DEFAULT_TLS_SIDECAR_KAFKA_IMAGE
+            value: registry.redhat.io/amq7/amq-streams-kafka-22:1.2.0
+          - name: STRIMZI_DEFAULT_TLS_SIDECAR_ZOOKEEPER_IMAGE
+            value: registry.redhat.io/amq7/amq-streams-kafka-22:1.2.0
+          - name: STRIMZI_KAFKA_IMAGES
+            value: |
+              2.1.1=registry.redhat.io/amq7/amq-streams-kafka-21:1.2.0
+              2.2.1=registry.redhat.io/amq7/amq-streams-kafka-22:1.2.0
+          - name: STRIMZI_KAFKA_CONNECT_IMAGES
+            value: |
+              2.1.1=registry.redhat.io/amq7/amq-streams-kafka-21:1.2.0
+              2.2.1=registry.redhat.io/amq7/amq-streams-kafka-22:1.2.0
+          - name: STRIMZI_KAFKA_CONNECT_S2I_IMAGES
+            value: |
+              2.1.1=registry.redhat.io/amq7/amq-streams-kafka-21:1.2.0
+              2.2.1=registry.redhat.io/amq7/amq-streams-kafka-22:1.2.0
+          - name: STRIMZI_KAFKA_MIRROR_MAKER_IMAGES
+            value: |
+              2.1.0=registry.redhat.io/amq7/amq-streams-kafka-21:1.2.0
+              2.2.1=registry.redhat.io/amq7/amq-streams-kafka-22:1.2.0
+          - name: STRIMZI_DEFAULT_TOPIC_OPERATOR_IMAGE
+            value: registry.redhat.io/amq7/amq-streams-operator:1.2.0
+          - name: STRIMZI_DEFAULT_USER_OPERATOR_IMAGE
+            value: registry.redhat.io/amq7/amq-streams-operator:1.2.0
+          - name: STRIMZI_DEFAULT_KAFKA_INIT_IMAGE
+            value: registry.redhat.io/amq7/amq-streams-operator:1.2.0
+          - name: STRIMZI_DEFAULT_KAFKA_BRIDGE_IMAGE
+            value: registry.redhat.io/amq7/amq-streams-bridge:1.2.0
+          - name: STRIMZI_LOG_LEVEL
+            value: INFO
+          livenessProbe:
+            httpGet:
+              path: /healthy
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            limits:
+              cpu: 1000m
+              memory: 256Mi
+            requests:
+              cpu: 200m
+              memory: 256Mi
+    strategy:
+      type: Recreate
+parameters:
+- description: pull secret from registry.redhat.com.
+  name: PULL_SECRET
+  required: true
+- description: Strimzi Operator Service Account Name
+  displayName: Operator Service Account Name
+  name: SERVICE_ACCOUNT_NAME
+  value: strimzi-cluster-operator
+- description: 'Comma separated list of namespaces to be watched by the operator'
+  displayName: "List of namespaces to watch"
+  name: NAMESPACES_TO_WATCH
+  required: true
