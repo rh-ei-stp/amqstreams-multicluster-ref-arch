@@ -19,6 +19,13 @@ objects:
   spec:
     version: 2.2.1
     replicas: ${{KAFKA_MIRRORMAKER_REPLICAS}}
+    resources:
+      requests:
+        memory: 512Mi
+        cpu: 250m
+      limits:
+        memory: 2Gi
+        cpu: 500m
     consumer:
       bootstrapServers: ${SOURCE_BOOTSTRAP_URL}:${SOURCE_BOOTSTRAP_PORT}
       groupId: ${KAFKA_MIRRORMAKER}-group-id
@@ -44,6 +51,8 @@ objects:
         passwordSecret:
           secretName: ${PRODUCER_PASSWORD_SECRET}
           password: ${PRODUCER_PASSWORD_KEY}
+      config:
+        max.request.size: 2097152
     whitelist: ${WHITELIST_TOPICS}
 parameters:
 - description: Name of the Kafka Mirrormaker
@@ -53,7 +62,7 @@ parameters:
 - description: Number of mirrormaker replicas
   displayName: MirrorMaker replicas
   name: KAFKA_MIRRORMAKER_REPLICAS
-  value: "1"
+  value: "3"
 - description: Bootstrap URL of the kafka cluster mirrormaker consumes from
   displayName: Source Kafka bootstrap URL
   name: SOURCE_BOOTSTRAP_URL

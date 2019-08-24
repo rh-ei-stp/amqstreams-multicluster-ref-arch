@@ -100,7 +100,7 @@ Here are the steps
 	```shell
     export BROKER_URL=`oc get routes my-cluster-kafka-bootstrap -n datacenter-a -o=jsonpath='{.status.ingress[0].host}{"\n"}'`
     
-    oc process -f mirrormaker_template.yaml -p SOURCE_BOOTSTRAP_URL=$BROKER_URL \
+    oc process -f templates/mirrormaker_template.yaml -p SOURCE_BOOTSTRAP_URL=$BROKER_URL \
     -p DESTINATION_BOOTSTRAP_SVC=my-second-cluster-kafka-bootstrap \
     -p CONSUMER_TLS_SECRET=consumer-secret -p CONSUMER_CERT_FILENAME=ca.crt \
     -p CONSUMER_USERNAME=my-user -p CONSUMER_PASSWORD_SECRET=consumer-password \
@@ -207,5 +207,85 @@ We are going to use the same kafka console utilities and `client-sasl-scram.prop
 4. In the producer window, type the messages and see that they are consumed by two consumers i.e. one is listening to a topic in source cluster and the other is to the destination cluster.
 
 5. Run consumer and producer against kafka cluster in datacenter-b by changing the bootstrap url
+
+## Performance Testing
+
+Kafka Broker
+
+```yaml
+  replicas: 3
+  resources:
+    limits:
+      cpu: 750m
+      memory: 2Gi
+```
+
+Zookeeper
+
+```yaml
+  replicas: 3
+  resources:
+    limits:
+      cpu: 500m
+      memory: 2Gi
+```
+
+MirrorMaker
+
+```yaml
+  replicas: 3
+  resources:
+    limits:
+      cpu: 500m
+      memory: 2Gi
+```
+
+Producer command:
+
+```shell
+
+$KAFKA_HOME/bin/kafka-producer-perf-test.sh --topic my-topic \
+--num-records 10000 \
+--record-size 4096 \
+--throughput 100000 \
+--producer.config client-sasl-scram.properties \
+--producer-props \
+acks=1 \
+bootstrap.servers=$BROKER_URL:443 \
+buffer.memory=67108864 \
+compression.type=none \
+batch.size=8196
+```
+MirrorMaker lag monitoring:
+
+```shell
+watch '$KAFKA_HOME/bin/kafka-consumer-groups.sh --bootstrap-server $BROKER_URL:443 --command-config client-sasl-scram.properties --group my-mirrormaker-group-id --describe'
+```
+
+Producer test results:
+
+| Broker Replicas | Replica Mem Limit | Message Size       | Message Rate | Throughput | Avg Latency | Max MirrorMaker Lag |
+| --------------- | ----------------- | ------------------ | ------------ | ---------- | ----------- | ------------------- |
+| 3               | 2 Gi              | 10  KiB (10240B)   | 100 msg/s    | 1.0 MB/s   | 3  ms       |  2000 records       |
+| 3               | 2 Gi              | 100 KiB (102400B)  | 10  msg/s    | 1.0 MB/s   | 30 ms       |  200  records       |
+| 3               | 2 Gi              | 1   MiB (1048000B) | 1   msg/s    | 1.0 MB/s   | 30 ms       |  20   records       |
+
+Latency test:
+
+```shell
+$KAFKA_HOME/bin/kafka-run-class.sh kafka.tools.EndToEndLatency $BROKER_URL:443 my-topic 1000 all 4096 client-sasl-scram.properties
+```
+
+Conclusions:
+
+Given a small cluster (see limits above) and a producer throughput of 1 MB/s, we can keep `datacenter-b` generally less than 20 seconds 
+behind `datacenter-a`. This may or may not be within an organization's SLAs.
+
+To enable large messages, these two values need to match: `KafkaMirrorMaker.spec.producer.config.max.request.size`
+ and `Kafka.spec.kafka.config.message.max.bytes`
+
+Consider setting `Kafka.spec.kafka.config.log.retention.bytes` to less than the size of the Persistent Volume Claim to avoid running out of disk.
+
+
 
 
