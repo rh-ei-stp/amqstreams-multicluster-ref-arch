@@ -86,21 +86,21 @@ Here are the steps
 2. MirrorMaker communicates with two clusters. So, create two secrets that houses certificates i.e. producer-secret and consumer-secret. Even though it is same certificate for both clusters, KafkaMirrorMaker needs them to be defined as two different secrets
 
 	```console
-    oc create secret generic producer-secret --from-file=ca.crt
-    oc create secret generic consumer-secret --from-file=ca.crt
+    oc create secret generic producer-secret --from-file=ca.crt -n datacenter-b
+    oc create secret generic consumer-secret --from-file=ca.crt -n datacenter-b
     ```
 3. MirrorMaker has to authenticate while communicating with clusters. So, create two secrets that contains password i.e. producer-password and consumer-password. Even though it is same credentials for both clusters, KafkaMirrorMaker needs them to be defined as two different secrets
 
 	```console
-    oc create secret generic producer-password --from-literal=password=gUoNKbFYIPV5
-    oc create secret generic consumer-password --from-literal=password=gUoNKbFYIPV5
+    oc create secret generic producer-password --from-literal=password=gUoNKbFYIPV5 -n datacenter-b
+    oc create secret generic consumer-password --from-literal=password=gUoNKbFYIPV5 -n datacenter-b
     ```
 4. Deploy the MirrorMaker using template
 
 	```console
     export BROKER_URL=`oc get routes my-cluster-kafka-bootstrap -n datacenter-a -o=jsonpath='{.status.ingress[0].host}{"\n"}'`
     
-    oc process -f mirrormaker_template.yaml -p SOURCE_BOOTSTRAP_URL=$BROKER_URL \
+    oc process -f templates/mirrormaker_template.yaml -p SOURCE_BOOTSTRAP_URL=$BROKER_URL \
     -p DESTINATION_BOOTSTRAP_SVC=my-second-cluster-kafka-bootstrap \
     -p CONSUMER_TLS_SECRET=consumer-secret -p CONSUMER_CERT_FILENAME=ca.crt \
     -p CONSUMER_USERNAME=my-user -p CONSUMER_PASSWORD_SECRET=consumer-password \
@@ -198,7 +198,7 @@ We are going to use the same kafka console utilities and `client-sasl-scram.prop
 	```
 3. Run a producer producing messages to source cluster i.e. datacenter-a in a terminal window
 
-	```
+	```console
 	export BROKER_URL=`oc get routes my-cluster-kafka-bootstrap -n datacenter-a -o=jsonpath='{.status.ingress[0].host}{"\n"}'`
 	$KAFKA_HOME/bin/kafka-console-producer.sh --broker-list $BROKER_URL:443 --topic my-topic --producer.config client-sasl-scram.properties
 	```

@@ -1,8 +1,8 @@
 apiVersion: template.openshift.io/v1
 kind: Template
 labels:
-  template: amq-streams-12-mirrormaker-template
-message: Kafka MirrorMaker based on AMQ Streams 1.2 is deployed into your project
+  template: amq-streams-14-mirrormaker-template
+message: Kafka MirrorMaker based on AMQ Streams 1.4 is deployed into your project
 metadata:
   annotations:
     description: MirrorMaker Template for Red Hat AMQ Streams
@@ -10,14 +10,14 @@ metadata:
     openshift.io/provider-display-name: Red Hat, Inc.
     tags: streams,amq,xpaas, strimzi
     template.openshift.io/documentation-url: 'https://access.redhat.com/documentation/en/red-hat-amq/'
-  name: amq-streams-v12-mirrormaker
+  name: amq-streams-v14-mirrormaker
 objects:
 - apiVersion: kafka.strimzi.io/v1beta1
   kind: KafkaMirrorMaker
   metadata:
     name: ${KAFKA_MIRRORMAKER}
   spec:
-    version: 2.2.1
+    version: 2.4.0
     replicas: ${{KAFKA_MIRRORMAKER_REPLICAS}}
     consumer:
       bootstrapServers: ${SOURCE_BOOTSTRAP_URL}:${SOURCE_BOOTSTRAP_PORT}
