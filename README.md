@@ -28,12 +28,12 @@ In order to deploy execute the following steps
     export PULL_SECRET=$(cat ./pull-secret.base64)
     ```
     
-2. Clone this repository to your local computer and login to the OpenShift Cluster using a user who has ClusterAdmin access. ClusterAdmin is needed to install and create Kafka Custom Resource Definitions(CRDs).  
+2. Clone this repository to your local computer and login to the OpenShift Cluster using a user who has ClusterAdmin access. ClusterAdmin is needed to install and create Kafka Custom Resource Definitions(CRDs). 
 
-To add cluster cluster admin rights
+    To add cluster cluster admin rights
 
     ```console
-     oc adm policy add-cluster-role-to-user cluster-admin
+    oc adm policy add-cluster-role-to-user cluster-admin
     ```
 
 3. Deploy Kafka CRDs:
