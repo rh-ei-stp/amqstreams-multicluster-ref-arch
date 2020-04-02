@@ -152,7 +152,7 @@ Once operators and clusters are deployed, here are the steps to produce and cons
 	
 6. Run a producer in a different terminal window
 
-	```
+	``` console
 	export BROKER_URL=`oc get routes my-cluster-kafka-bootstrap -n datacenter-a -o=jsonpath='{.status.ingress[0].host}{"\n"}'`
 	export KAFKA_HOME=kafka-util/kafka_2.12-2.2.1.redhat-00002
 	$KAFKA_HOME/bin/kafka-console-producer.sh --broker-list $BROKER_URL:443 --topic my-topic --producer.config client-sasl-scram.properties
@@ -162,21 +162,20 @@ Once operators and clusters are deployed, here are the steps to produce and cons
 
 8. Run consumer and producer against kafka cluster in datacenter-b by changing the bootstrap url.
 
-Kill the producer and consumer programs with ```ctrl-c```.
+   Kill the producer and consumer programs with `ctrl-c`.
 
-Run a consumer in a terminal window
+   Run a consumer in a terminal window
 
-        ```console
-        export BROKER_URL=`oc get routes my-second-cluster-kafka-bootstrap -n datacenter-b -o=jsonpath='{.status.ingress[0].host}{"\n"}'` 
-        $KAFKA_HOME/bin/kafka-console-producer.sh --broker-list $BROKER_URL:443 --topic my-topic --producer.config client-sasl-scram.properties
-        ```
+   ```console
+   export BROKER_URL=`oc get routes my-second-cluster-kafka-bootstrap -n datacenter-b -o=jsonpath='{.status.ingress[0].host}{"\n"}'` 
+   $KAFKA_HOME/bin/kafka-console-producer.sh --broker-list $BROKER_URL:443 --topic my-topic --producer.config client-sasl-scram.properties
+   ```
 
-Run a producer in a different terminal window
-
-        ```console
-        export BROKER_URL=`oc get routes my-second-cluster-kafka-bootstrap -n datacenter-b -o=jsonpath='{.status.ingress[0].host}{"\n"}'`
-        $KAFKA_HOME/bin/kafka-console-producer.sh --broker-list $BROKER_URL:443 --topic my-topic --producer.config client-sasl-scram.properties
-        ```
+    Run a producer in a different terminal window
+    ```console
+    export BROKER_URL=`oc get routes my-second-cluster-kafka-bootstrap -n datacenter-b -o=jsonpath='{.status.ingress[0].host}{"\n"}'`
+    $KAFKA_HOME/bin/kafka-console-producer.sh --broker-list $BROKER_URL:443 --topic my-topic --producer.config client-sasl-scram.properties
+    ```
 
 ## MirrorMaker Verification
 
