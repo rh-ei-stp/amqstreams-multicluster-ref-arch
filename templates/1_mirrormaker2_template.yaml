@@ -1,0 +1,144 @@
+apiVersion: template.openshift.io/v1
+kind: Template
+labels:
+  template: amq-streams-14-mirrormaker-template
+message: Kafka MirrorMaker2 based on AMQ Streams 1.4 will be deployed to your project
+metadata:
+  annotations:
+    description: MirrorMaker Template for Red Hat AMQ Streams
+    openshift.io/display-name: Red Hat AMQ Streams
+    openshift.io/provider-display-name: Red Hat, Inc.
+    tags: streams,amq,xpaas, strimzi
+    template.openshift.io/documentation-url: 'https://access.redhat.com/documentation/en/red-hat-amq/'
+  name: amq-streams-v14-mirrormaker
+objects:
+- apiVersion: kafka.strimzi.io/v1alpha1
+  kind: KafkaMirrorMaker2
+  metadata:
+    name: ${KAFKA_MIRRORMAKER}
+  spec:
+    version: 2.4.0
+    replicas: ${{KAFKA_MIRRORMAKER_REPLICAS}}
+    connectCluster: ${TARGET_CLUSTER_ALIAS}
+    config:
+      config.storage.replication.factor: 1
+      offset.storage.replication.factor: 1
+      status.storage.replication.factor: 1
+    clusters:
+    - alias: ${SOURCE_CLUSTER_ALIAS}
+      bootstrapServers: ${SOURCE_BOOTSTRAP_URL}:${SOURCE_BOOTSTRAP_PORT}
+      tls:
+        trustedCertificates:
+        - secretName: ${CONSUMER_TLS_SECRET}
+          certificate: ${CONSUMER_CERT_FILENAME}
+      authentication:
+        type: scram-sha-512
+        username: ${CONSUMER_USERNAME}
+        passwordSecret:
+          secretName: ${CONSUMER_PASSWORD_SECRET}
+          password: ${CONSUMER_PASSWORD_KEY}
+    - alias: ${TARGET_CLUSTER_ALIAS}
+      bootstrapServers: ${DESTINATION_BOOTSTRAP_SVC}:${DESTINATION_BOOTSTRAP_PORT}
+      tls:
+        trustedCertificates:
+        - secretName: ${PRODUCER_TLS_SECRET}
+          certificate: ${PRODUCER_CERT_FILENAME}
+      authentication:
+        type: scram-sha-512
+        username: ${PRODUCER_USERNAME}
+        passwordSecret:
+          secretName: ${PRODUCER_PASSWORD_SECRET}
+          password: ${PRODUCER_PASSWORD_KEY}
+    mirrors:
+    - sourceCluster: ${SOURCE_CLUSTER_ALIAS}
+      targetCluster: ${TARGET_CLUSTER_ALIAS}
+      sourceConnector:
+        config:
+          replication.factor: 1
+          offset-syncs.topic.replication.factor: 1
+          sync.topic.acls.enabled: "false"
+      heartbeatConnector:
+        config:
+          heartbeats.topic.replication.factor: 1
+      checkpointConnector:
+        config:
+          checkpoints.topic.replication.factor: 1
+      topicsPattern: ${WHITELIST_TOPICS}
+      groupsPattern: ".*"
+parameters:
+- description: Name of the Kafka Mirrormaker
+  displayName: Kafka MirrorMaker Name
+  name: KAFKA_MIRRORMAKER
+  value: "my-mirrormaker2"
+- description: Number of mirrormaker replicas
+  displayName: MirrorMaker replicas
+  name: KAFKA_MIRRORMAKER_REPLICAS
+  value: "1"
+- description: Bootstrap URL of the kafka cluster mirrormaker consumes from
+  displayName: Source Kafka bootstrap URL
+  name: SOURCE_BOOTSTRAP_URL
+  required: true
+- description: Bootstrap URL port of the kafka cluster mirrormaker consumes from
+  displayName: Source Kafka bootstrap URL port
+  name: SOURCE_BOOTSTRAP_PORT
+  value: "443"
+- description: Bootstrap Service of the kafka cluster mirrormaker produces to
+  displayName: Destination Kafka bootstrap service name
+  name: DESTINATION_BOOTSTRAP_SVC
+  required: true
+- description: Bootstrap Service Port of the kafka cluster mirrormaker produces to
+  displayName: Destination Kafka bootstrap service port
+  name: DESTINATION_BOOTSTRAP_PORT
+  value: "9093"
+- description: Name of the secret containing the keystore file of source kafka cluster
+  displayName: Source Kafka Cluster Secret Name
+  name: CONSUMER_TLS_SECRET
+  required: true
+- description: Name of the key store file within the CONSUMER_TLS_SECRET
+  displayName: Source Kafka Cluster key store filename
+  name: CONSUMER_CERT_FILENAME
+  required: true
+- description: UserName to authenticate with source kafka cluster
+  displayName: Source Kafka Cluster UserName
+  name: CONSUMER_USERNAME
+  required: true
+- description: Name of the secret containing the password for the user used to authenticate source kafka cluster
+  displayName: Source Kafka Cluster Password Secret Name
+  name: CONSUMER_PASSWORD_SECRET
+  required: true
+- description: Name of the key in Source Kafka Cluster Password Secret Name
+  displayName: Source Kafka Cluster Password Secret Key Name
+  name: CONSUMER_PASSWORD_KEY
+  required: true
+- description: Name of the secret containing the keystore file of destination kafka cluster
+  displayName: Destination Kafka Cluster Secret Name
+  name: PRODUCER_TLS_SECRET
+  required: true
+- description: Name of the key store file within the PRODUCER_TLS_SECRET
+  displayName: Destination Kafka Cluster key store filename
+  name: PRODUCER_CERT_FILENAME
+  required: true
+- description: UserName to authenticate with destination kafka cluster
+  displayName: Destination Kafka Cluster UserName
+  name: PRODUCER_USERNAME
+  required: true
+- description: Name of the secret containing the password for the user used to authenticate destination kafka cluster
+  displayName: Destination Kafka Cluster Password Secret Name
+  name: PRODUCER_PASSWORD_SECRET
+  required: true
+- description: Name of the key in Destination Kafka Cluster Password Secret Name
+  displayName: Destination Kafka Cluster Password Secret Key Name
+  name: PRODUCER_PASSWORD_KEY
+  required: true
+- description: List of topics mirrored by mirrormaker in java style regular expression
+  displayName: List of topics included for mirroring.
+  name: WHITELIST_TOPICS
+  value: ".*"
+- description: (Source) kafka cluster from where the messages are consumed from
+  displayName: Source Cluster Alias
+  name: SOURCE_CLUSTER_ALIAS
+  required: true
+- description: (Target) kafka cluster where the messages are produced to
+  displayName: Target Cluster Alias
+  name: TARGET_CLUSTER_ALIAS
+  required: true
