@@ -24,33 +24,33 @@ In order to deploy execute the following steps
 
 1. Set some environment variables:
 
-    ```shell
+    ```console
     export PULL_SECRET=$(cat ./pull-secret.base64)
     ```
     
-2. Clone this repository to your local computer and login to the OpenShift Cluster using a user who has ClusterAdmin access. ClusterAdmin is needed to install and create Kafka Custom Resource Definitions(CRDs).  
+2. Clone this repository to your local computer and login to the OpenShift Cluster using a user who has ClusterAdmin access. ClusterAdmin is needed to install and create Kafka Custom Resource Definitions(CRDs). 
 
-To add cluster cluster admin rights
+    To add cluster cluster admin rights
 
-    ```shell
-     oc adm policy add-cluster-role-to-user cluster-admin
+    ```console
+    oc adm policy add-cluster-role-to-user cluster-admin
     ```
 
 3. Deploy Kafka CRDs:
 
-    ```shell
+    ```console
 	oc apply -f crd/
     ```
 
 4. Create ClusterRoles that are eventually assigned to Strimzi Operator ServiceAccounts
 
-    ```shell
+    ```console
 	oc apply -f clusterrole/
     ```
     
 5. Create projects and deploy AMQStreams operator, kafka clusters. AMQStreams Operator deployed in amq-operator-a watches for Kafka CRDs in datacenter-a. Here, kafka cluster is created with own cluster certificates.
 
-    ```shell
+    ```console
     oc new-project amq-operator-a
 	oc new-project datacenter-a
 	oc process -f templates/operator_template.yaml -p NAMESPACES_TO_WATCH=datacenter-a -p PULL_SECRET=$PULL_SECRET -p SERVICE_ACCOUNT_NAME=strimzi-cluster-operator| oc apply -f - -n amq-operator-a
@@ -59,13 +59,13 @@ To add cluster cluster admin rights
     
 6. AMQStreams Operator in above step is created in **paused** state. So, resume the deployment
    
-    ```shell
+    ```console
     oc rollout resume  deployment strimzi-cluster-operator -n amq-operator-a
     ```
 
 7. Repeat above two steps where AMQStreams Operator deployed in amq-operator-b watches for Kafka CRDs in datacenter-b.
 
-    ```shell
+    ```console
     oc new-project amq-operator-b
     oc new-project datacenter-b
     oc process -f templates/operator_template.yaml -p NAMESPACES_TO_WATCH=datacenter-b -p PULL_SECRET=$PULL_SECRET -p SERVICE_ACCOUNT_NAME=strimzi-cluster-operator| oc apply -f - -n amq-operator-b
@@ -79,28 +79,28 @@ Here are the steps
 
 1. In our case, same certificates are used for source and destination clusters. So, extract the certificate from one of the kafka cluster namespaces i.e. datacenter-a or datacenter-b
 
-    ```shell
+    ```console
 	oc extract secret/my-cluster-cluster-ca-cert -n datacenter-a --keys=ca.crt --to=- > ca.crt
     ```
 
 2. MirrorMaker communicates with two clusters. So, create two secrets that houses certificates i.e. producer-secret and consumer-secret. Even though it is same certificate for both clusters, KafkaMirrorMaker needs them to be defined as two different secrets
 
-	```shell
-    oc create secret generic producer-secret --from-file=ca.crt
-    oc create secret generic consumer-secret --from-file=ca.crt
+	```console
+    oc create secret generic producer-secret --from-file=ca.crt -n datacenter-b
+    oc create secret generic consumer-secret --from-file=ca.crt -n datacenter-b
     ```
 3. MirrorMaker has to authenticate while communicating with clusters. So, create two secrets that contains password i.e. producer-password and consumer-password. Even though it is same credentials for both clusters, KafkaMirrorMaker needs them to be defined as two different secrets
 
-	```shell
-    oc create secret generic producer-password --from-literal=password=gUoNKbFYIPV5
-    oc create secret generic consumer-password --from-literal=password=gUoNKbFYIPV5
+	```console
+    oc create secret generic producer-password --from-literal=password=gUoNKbFYIPV5 -n datacenter-b
+    oc create secret generic consumer-password --from-literal=password=gUoNKbFYIPV5 -n datacenter-b
     ```
 4. Deploy the MirrorMaker using template
 
-	```shell
+	```console
     export BROKER_URL=`oc get routes my-cluster-kafka-bootstrap -n datacenter-a -o=jsonpath='{.status.ingress[0].host}{"\n"}'`
     
-    oc process -f mirrormaker_template.yaml -p SOURCE_BOOTSTRAP_URL=$BROKER_URL \
+    oc process -f templates/mirrormaker_template.yaml -p SOURCE_BOOTSTRAP_URL=$BROKER_URL \
     -p DESTINATION_BOOTSTRAP_SVC=my-second-cluster-kafka-bootstrap \
     -p CONSUMER_TLS_SECRET=consumer-secret -p CONSUMER_CERT_FILENAME=ca.crt \
     -p CONSUMER_USERNAME=my-user -p CONSUMER_PASSWORD_SECRET=consumer-password \
@@ -117,13 +117,13 @@ Once operators and clusters are deployed, here are the steps to produce and cons
 
 2. Extract the certificate from one of the kafka cluster namespaces i.e. datacenter-a or datacenter-b
 
-	```shell
+	```console
 	oc extract secret/my-cluster-cluster-ca-cert -n datacenter-a --keys=ca.crt --to=- > ca.crt
 	```
 
 3. Create a java key store file for kafka utilities
 
-	```shell
+	```console
 	keytool -keystore kafka.client.truststore.jks -alias CARoot -import -file ca.crt -storepass test1234 -noprompt
 	```
 
@@ -144,7 +144,7 @@ Once operators and clusters are deployed, here are the steps to produce and cons
 	
 5. Run a consumer in a terminal window
 
-	```shell
+	```console
 	export BROKER_URL=`oc get routes my-cluster-kafka-bootstrap -n datacenter-a -o=jsonpath='{.status.ingress[0].host}{"\n"}'`
 	export KAFKA_HOME=kafka-util
 	$KAFKA_HOME/bin/kafka-console-consumer.sh --bootstrap-server $BROKER_URL:443 --topic my-topic --consumer.config client-sasl-scram.properties
@@ -152,7 +152,7 @@ Once operators and clusters are deployed, here are the steps to produce and cons
 	
 6. Run a producer in a different terminal window
 
-	```
+	``` console
 	export BROKER_URL=`oc get routes my-cluster-kafka-bootstrap -n datacenter-a -o=jsonpath='{.status.ingress[0].host}{"\n"}'`
 	export KAFKA_HOME=kafka-util/kafka_2.12-2.2.1.redhat-00002
 	$KAFKA_HOME/bin/kafka-console-producer.sh --broker-list $BROKER_URL:443 --topic my-topic --producer.config client-sasl-scram.properties
@@ -162,22 +162,20 @@ Once operators and clusters are deployed, here are the steps to produce and cons
 
 8. Run consumer and producer against kafka cluster in datacenter-b by changing the bootstrap url.
 
-Kill the producer and consumer programs with ```ctrl-c```.
+   Kill the producer and consumer programs with `ctrl-c`.
 
-Run a consumer in a terminal window
+   Run a consumer in a terminal window
 
-        ```
-        export BROKER_URL=`oc get routes my-second-cluster-kafka-bootstrap -n datacenter-b -o=jsonpath='{.status.ingress[0].host}{"\n"}'` 
-        $KAFKA_HOME/bin/kafka-console-producer.sh --broker-list $BROKER_URL:443 --topic my-topic --producer.config client-sasl-scram.properties
+   ```console
+   export BROKER_URL=`oc get routes my-second-cluster-kafka-bootstrap -n datacenter-b -o=jsonpath='{.status.ingress[0].host}{"\n"}'` 
+   $KAFKA_HOME/bin/kafka-console-producer.sh --broker-list $BROKER_URL:443 --topic my-topic --producer.config client-sasl-scram.properties
+   ```
 
-        ```
-
-Run a producer in a different terminal window
-
-        ```
-        export BROKER_URL=`oc get routes my-second-cluster-kafka-bootstrap -n datacenter-b -o=jsonpath='{.status.ingress[0].host}{"\n"}'`
-        $KAFKA_HOME/bin/kafka-console-producer.sh --broker-list $BROKER_URL:443 --topic my-topic --producer.config client-sasl-scram.properties
-        ```
+    Run a producer in a different terminal window
+    ```console
+    export BROKER_URL=`oc get routes my-second-cluster-kafka-bootstrap -n datacenter-b -o=jsonpath='{.status.ingress[0].host}{"\n"}'`
+    $KAFKA_HOME/bin/kafka-console-producer.sh --broker-list $BROKER_URL:443 --topic my-topic --producer.config client-sasl-scram.properties
+    ```
 
 ## MirrorMaker Verification
 
@@ -185,14 +183,14 @@ We are going to use the same kafka console utilities and `client-sasl-scram.prop
 
 1. Run a consumer consuming messages from source cluster i.e. datacenter-a in a terminal window
 
-	```shell
+	```console
 	export BROKER_URL=`oc get routes my-cluster-kafka-bootstrap -n datacenter-a -o=jsonpath='{.status.ingress[0].host}{"\n"}'`
 	export KAFKA_HOME=kafka-util
 	$KAFKA_HOME/bin/kafka-console-consumer.sh --bootstrap-server $BROKER_URL:443 --topic my-topic --consumer.config client-sasl-scram.properties
 	```
 2. Run another consumer consuming messages from destination cluster i.e. datacenter-b in a terminal window
 
-	```shell
+	```console
 	export BROKER_URL=`oc get routes my-second-cluster-kafka-bootstrap -n datacenter-b -o=jsonpath='{.status.ingress[0].host}{"\n"}'`
 	export KAFKA_HOME=kafka-util
 
@@ -200,7 +198,7 @@ We are going to use the same kafka console utilities and `client-sasl-scram.prop
 	```
 3. Run a producer producing messages to source cluster i.e. datacenter-a in a terminal window
 
-	```
+	```console
 	export BROKER_URL=`oc get routes my-cluster-kafka-bootstrap -n datacenter-a -o=jsonpath='{.status.ingress[0].host}{"\n"}'`
 	$KAFKA_HOME/bin/kafka-console-producer.sh --broker-list $BROKER_URL:443 --topic my-topic --producer.config client-sasl-scram.properties
 	```

@@ -2,7 +2,7 @@ apiVersion: template.openshift.io/v1
 kind: Template
 labels:
   template: amq-streams-14-mirrormaker-template
-message: Kafka MirrorMaker based on AMQ Streams 1.4 is deployed into your project
+message: Kafka MirrorMaker2 based on AMQ Streams 1.4 will be deployed to your project
 metadata:
   annotations:
     description: MirrorMaker Template for Red Hat AMQ Streams
@@ -12,44 +12,64 @@ metadata:
     template.openshift.io/documentation-url: 'https://access.redhat.com/documentation/en/red-hat-amq/'
   name: amq-streams-v14-mirrormaker
 objects:
-- apiVersion: kafka.strimzi.io/v1beta1
-  kind: KafkaMirrorMaker
+- apiVersion: kafka.strimzi.io/v1alpha1
+  kind: KafkaMirrorMaker2
   metadata:
     name: ${KAFKA_MIRRORMAKER}
   spec:
     version: 2.4.0
     replicas: ${{KAFKA_MIRRORMAKER_REPLICAS}}
-    consumer:
+    connectCluster: ${TARGET_CLUSTER_ALIAS}
+    config:
+      config.storage.replication.factor: 1
+      offset.storage.replication.factor: 1
+      status.storage.replication.factor: 1
+    clusters:
+    - alias: ${SOURCE_CLUSTER_ALIAS}
       bootstrapServers: ${SOURCE_BOOTSTRAP_URL}:${SOURCE_BOOTSTRAP_PORT}
-      groupId: ${KAFKA_MIRRORMAKER}-group-id
       tls:
         trustedCertificates:
-          - secretName: ${CONSUMER_TLS_SECRET}
-            certificate: ${CONSUMER_CERT_FILENAME}
+        - secretName: ${CONSUMER_TLS_SECRET}
+          certificate: ${CONSUMER_CERT_FILENAME}
       authentication:
         type: scram-sha-512
         username: ${CONSUMER_USERNAME}
         passwordSecret:
           secretName: ${CONSUMER_PASSWORD_SECRET}
           password: ${CONSUMER_PASSWORD_KEY}
-    producer:
+    - alias: ${TARGET_CLUSTER_ALIAS}
       bootstrapServers: ${DESTINATION_BOOTSTRAP_SVC}:${DESTINATION_BOOTSTRAP_PORT}
       tls:
         trustedCertificates:
-          - secretName: ${PRODUCER_TLS_SECRET}
-            certificate: ${PRODUCER_CERT_FILENAME}
+        - secretName: ${PRODUCER_TLS_SECRET}
+          certificate: ${PRODUCER_CERT_FILENAME}
       authentication:
         type: scram-sha-512
         username: ${PRODUCER_USERNAME}
         passwordSecret:
           secretName: ${PRODUCER_PASSWORD_SECRET}
           password: ${PRODUCER_PASSWORD_KEY}
-    whitelist: ${WHITELIST_TOPICS}
+    mirrors:
+    - sourceCluster: ${SOURCE_CLUSTER_ALIAS}
+      targetCluster: ${TARGET_CLUSTER_ALIAS}
+      sourceConnector:
+        config:
+          replication.factor: 1
+          offset-syncs.topic.replication.factor: 1
+          sync.topic.acls.enabled: "false"
+      heartbeatConnector:
+        config:
+          heartbeats.topic.replication.factor: 1
+      checkpointConnector:
+        config:
+          checkpoints.topic.replication.factor: 1
+      topicsPattern: ${WHITELIST_TOPICS}
+      groupsPattern: ".*"
 parameters:
 - description: Name of the Kafka Mirrormaker
   displayName: Kafka MirrorMaker Name
   name: KAFKA_MIRRORMAKER
-  value: "my-mirrormaker"
+  value: "my-mirrormaker2"
 - description: Number of mirrormaker replicas
   displayName: MirrorMaker replicas
   name: KAFKA_MIRRORMAKER_REPLICAS
@@ -114,3 +134,11 @@ parameters:
   displayName: List of topics included for mirroring.
   name: WHITELIST_TOPICS
   value: ".*"
+- description: (Source) kafka cluster from where the messages are consumed from
+  displayName: Source Cluster Alias
+  name: SOURCE_CLUSTER_ALIAS
+  required: true
+- description: (Target) kafka cluster where the messages are produced to
+  displayName: Target Cluster Alias
+  name: TARGET_CLUSTER_ALIAS
+  required: true
